@@ -1,9 +1,9 @@
 import gradio as gr
 import httpx
 
-API_CHAT_URL = "http://localhost:8000/chat"
-API_RESET_URL = "http://localhost:8000/reset"
-API_DOWNLOAD_URL = "http://localhost:8000/download-profile"
+API_CHAT_URL = "http://localhost:9000/chat"
+API_RESET_URL = "http://localhost:9000/reset"
+API_DOWNLOAD_URL = "http://localhost:9000/download-profile"
 
 def create_chatbot_interface():
     with gr.Blocks(title="Lauren - Dynamic AI College Counselor", theme=gr.themes.Soft()) as app:
