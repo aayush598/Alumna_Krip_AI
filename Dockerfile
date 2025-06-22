@@ -4,14 +4,14 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Copy all project files into container
+# Copy all files
 COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose only the Gradio UI port (7860) - since it is the user-facing part
-EXPOSE 7860
+# Expose port 8000 (Gradio UI will use this)
+EXPOSE 8000
 
-# Run FastAPI backend in background, and Gradio app in foreground
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8000 & python app.py"]
+# Run both FastAPI (background) and Gradio on same port (8000)
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 9000 & python app.py"]
