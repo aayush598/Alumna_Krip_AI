@@ -1,1 +1,22 @@
 # Alumna_Krip_AI
+
+# Dynamic AI College Counselor Chatbot
+
+## Overview
+
+This project implements a dynamic AI college counselor chatbot designed to interact with students, extract relevant information from conversations, and provide personalized college recommendations. The chatbot uses natural language processing to understand and organize information from natural conversation, making it easy for students to get guidance without filling out forms.
+
+## Features
+
+- **Natural Language Interaction**: Chat naturally about your academic background, goals, and preferences.
+- **Dynamic Information Extraction**: The chatbot automatically extracts and organizes relevant information from conversations.
+- **Personalized Recommendations**: Get tailored college recommendations based on your unique profile.
+- **Comprehensive College Database**: The chatbot uses a detailed database of colleges to match student profiles with suitable options.
+- **User-Friendly Interface**: Built with Gradio for an intuitive and interactive experience.
+
+## Installation
+
+1. **Clone the Repository**:
+   ```sh
+   git clone <repository-url>
+   cd <repository-directory>
