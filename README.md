@@ -1,11 +1,11 @@
 # Alumna_Krip_AI
 
 # Dynamic AI College Counselor Chatbot
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
 ## Overview
 
 This project implements a dynamic AI college counselor chatbot designed to interact with students, extract relevant information from conversations, and provide personalized college recommendations. The chatbot uses natural language processing to understand and organize information from natural conversation, making it easy for students to get guidance without filling out forms.
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
 ## Features
 
 - **Natural Language Interaction**: Chat naturally about your academic background, goals, and preferences.
@@ -13,7 +13,7 @@ This project implements a dynamic AI college counselor chatbot designed to inter
 - **Personalized Recommendations**: Get tailored college recommendations based on your unique profile.
 - **Comprehensive College Database**: The chatbot uses a detailed database of colleges to match student profiles with suitable options.
 - **User-Friendly Interface**: Built with Gradio for an intuitive and interactive experience.
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
 ## Installation
 
 1. Clone the Repository**:
@@ -28,12 +28,11 @@ This project implements a dynamic AI college counselor chatbot designed to inter
    GROQ_API_KEY=your_api_key_here
 3.Install Dependencies:
 
-   pip install -r requirements.txt
+      > pip install -r requirements.txt
    
 4.Run the Application:
 
-      ```sh
-         python app.py
+    > python app.py
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------        
 Usage
 
@@ -58,16 +57,21 @@ Code Structure
 Dependencies
 
 > Python 3.7+
+
 > Gradio
+
 > Groq
+
 > Pydantic
+
 > dotenv
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request with your changes.
-
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
 License
+
 This project is licensed under the MIT License.
 
 
