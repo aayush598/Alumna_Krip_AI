@@ -127,3 +127,13 @@ async def get_logs():
         }
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/profile")
+async def get_profile():
+    try:
+        profile_data = bot.student_profile.model_dump()
+        log_to_db("/profile", "-", "Fetched student profile", "success")
+        return profile_data
+    except Exception as e:
+        log_to_db("/profile", "-", str(e), "error")
+        return {"error": str(e)}
