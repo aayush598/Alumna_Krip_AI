@@ -16,7 +16,7 @@ This project implements a dynamic AI college counselor chatbot designed to inter
 
 ## Installation
 
-1. **Clone the Repository**:
+1. Clone the Repository**:
    ```sh
    git clone <repository-url>
    cd <repository-directory>
@@ -24,3 +24,6 @@ This project implements a dynamic AI college counselor chatbot designed to inter
 
 - **Create a .env file in the root directory.
 - **Add your Groq API key to the .env file:
+   ```sh
+   GROQ_API_KEY=your_api_key_here
+
