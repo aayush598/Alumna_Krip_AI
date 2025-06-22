@@ -40,16 +40,16 @@ Usage
 > Start the Chatbot:
 > Launch the application using the command above.
 > Open the provided URL in your web browser to access the chatbot interface.
-
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Interact with the Chatbot:
 
 Begin by greeting the chatbot and sharing information about your academic background, goals, and preferences.
 The chatbot will dynamically extract relevant information and guide the conversation toward providing personalized college recommendations.
-
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Download Your Profile:
 
 Once sufficient information has been collected, you can download your profile by clicking the "Download Profile" button.
-
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Code Structure
 > DynamicStudentProfile Class: Defines the model for storing student information.
 > DynamicCollegeCounselorChatbot Class: Core class for the chatbot, handling information extraction, sufficiency assessment, and recommendation generation.
@@ -57,11 +57,11 @@ Code Structure
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Dependencies
 
-Python 3.7+
-Gradio
-Groq
-Pydantic
-dotenv
+> Python 3.7+
+> Gradio
+> Groq
+> Pydantic
+> dotenv
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Contributing
 
