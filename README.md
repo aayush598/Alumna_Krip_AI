@@ -26,4 +26,10 @@ This project implements a dynamic AI college counselor chatbot designed to inter
 - **Add your Groq API key to the .env file**:
    ```sh
    GROQ_API_KEY=your_api_key_here
+3.Install Dependencies:
+   ```sh
+   pip install -r requirements.txt
+
+4.Run the Application:
+
 
