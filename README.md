@@ -5,7 +5,7 @@
 ## Overview
 
 This project implements a dynamic AI college counselor chatbot designed to interact with students, extract relevant information from conversations, and provide personalized college recommendations. The chatbot uses natural language processing to understand and organize information from natural conversation, making it easy for students to get guidance without filling out forms.
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+
 ## Features
 
 - **Natural Language Interaction**: Chat naturally about your academic background, goals, and preferences.
