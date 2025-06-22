@@ -1,3 +1,8 @@
 venv
 .env
 student_profiles
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
