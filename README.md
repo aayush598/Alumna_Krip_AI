@@ -30,6 +30,3 @@ This project implements a dynamic AI college counselor chatbot designed to inter
    ```sh
    pip install -r requirements.txt
 
-4.Run the Application:
-
-
