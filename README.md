@@ -27,17 +27,17 @@ This project implements a dynamic AI college counselor chatbot designed to inter
    ```sh
    GROQ_API_KEY=your_api_key_here
 3.Install Dependencies:
-   
+
    pip install -r requirements.txt
    
 4.Run the Application:
+
       ```sh
          python app.py
-         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------        
 Usage
 
 > Start the Chatbot:
-
 > Launch the application using the command above.
 > Open the provided URL in your web browser to access the chatbot interface.
 
