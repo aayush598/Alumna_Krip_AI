@@ -20,3 +20,7 @@ This project implements a dynamic AI college counselor chatbot designed to inter
    ```sh
    git clone <repository-url>
    cd <repository-directory>
+2.Set Up Environment Variables:
+
+Create a .env file in the root directory.
+Add your Groq API key to the .env file:
