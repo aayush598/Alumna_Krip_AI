@@ -1,174 +1,325 @@
+# 🎓 Alumna Krip AI - College Counselor API
 
-# 🎓 Alumna Krip AI - College Counseling Chatbot
-
-**Alumna Krip AI** is an intelligent, dynamic college counseling assistant built using **FastAPI** and **Gradio**. It guides students through a conversation to collect academic information, assess college readiness, and generate a downloadable student profile. The system logs every interaction in a local SQLite database for transparency and monitoring.
-
-> 🔗 Live Demo: [https://alumna-krip-ai.onrender.com](https://alumna-krip-ai.onrender.com)  
-> 📦 GitHub Repo: [github.com/aayush598/Alumna_Krip_AI](https://github.com/aayush598/Alumna_Krip_AI)
+An intelligent FastAPI-based system that guides students in choosing engineering colleges based on academic performance, budget, preferences, and other profile attributes. The system supports chat-based interaction, profile management, and college recommendations.
 
 ---
 
-## 📌 Features
+## 🚀 Features
 
-- 💬 Conversational AI for student counseling.
-- 🧠 Smart profile builder based on user inputs.
-- ✅ Readiness status tracking (`sufficient_info` flag).
-- 🧾 Downloadable student profile in JSON format.
-- 🔁 Resettable sessions via API.
-- 📊 Logs all chat and API interactions in `logs.db`.
-- 🐳 Dockerized deployment support.
-- 🌐 Integrated Gradio UI + FastAPI backend on the same port.
+- Conversational API for student counseling
+- Dynamic profile building
+- College recommendation engine
+- SQLite-powered backend
+- Full session tracking and analytics
+- Docker & Render deployment ready
 
 ---
 
-## 📁 File Structure
+## 📦 Technologies Used
 
-```
-
-Alumna_Krip_AI/
-│
-├── app.py                  # Gradio frontend app
-├── main.py                 # FastAPI backend with endpoints
-├── counselor.py            # Core logic for chatbot
-├── student\_profile.py      # Student profile model
-├── interface.py            # Gradio interface builder
-├── college\_database.py     # (Optional) Mock college data interface
-├── utils.py                # Helper utilities
-├── logs.db                 # SQLite database (auto-generated)
-├── .env                    # Environment config (optional)
-├── .gitignore
-├── Dockerfile
-├── requirements.txt
-└── README.md               # You're here!
-
-````
+- FastAPI
+- Python 3.12
+- SQLite3
+- Uvicorn
+- Docker
 
 ---
 
-## 🚀 Quick Start
+## 🛠️ Local Setup
 
-### 🔧 1. Clone & Setup
+### 1. Clone the repo
 
 ```bash
 git clone https://github.com/aayush598/Alumna_Krip_AI.git
 cd Alumna_Krip_AI
-pip install -r requirements.txt
 ````
 
-### ▶️ 2. Run the App
-
-Make sure `main.py` and `app.py` are in the same folder.
+### 2. Install dependencies
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 9000 & python app.py
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Or use the combined CMD inside Docker (recommended).
-
----
-
-## 🐳 Docker Deployment
-
-### 🔹 Dockerfile
-
-```dockerfile
-# Use official Python image
-FROM python:3.12-slim
-
-# Set working directory
-WORKDIR /app
-
-# Copy all files
-COPY . .
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Expose port 8000 (Gradio UI will use this)
-EXPOSE 8000
-
-# Run both FastAPI (background) and Gradio on same port (8000)
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 9000 & python app.py"]
-```
-
-### 🔹 Build & Run
+### 3. Run the API locally
 
 ```bash
-docker build -t alumna-ai .
-docker run -p 8000:8000 alumna-ai
+python main.py
 ```
 
-Access the app at: [http://localhost:8000](http://localhost:8000)
+> Access the API at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## 🔗 API Endpoints
+## 🚀 Deploying to Render (Docker)
 
-| Method | Endpoint            | Description                                                            |
-| ------ | ------------------- | ---------------------------------------------------------------------- |
-| POST   | `/chat`             | Accepts message + history, returns response, profile, readiness status |
-| GET    | `/download-profile` | Returns generated `student_profile.json`                               |
-| POST   | `/reset`            | Resets the chatbot session                                             |
-| GET    | `/logs`             | Retrieves the latest 100 logs from `logs.db`                           |
+### 1. Push your code to GitHub
 
----
+### 2. Create a new Web Service on [Render](https://dashboard.render.com/)
 
-## 🧠 Core Logic
+* Environment: **Docker**
+* Dockerfile path: `Dockerfile`
+* Exposed port: `8000`
 
-* **`DynamicCollegeCounselorChatbot`** (in `counselor.py`): Manages conversation, updates profile, tracks info completeness.
-* **`StudentProfile`** (in `student_profile.py`): Pydantic model to store academic and interest data.
-* **`logs.db`**: Auto-generated SQLite file storing API logs for `/chat`, `/reset`, `/profile`, etc.
+### 3. Done!
+
+Your app will be live at:
+`https://<your-app-name>.onrender.com`
 
 ---
 
-## 💬 Gradio Chat UI
+## 🔌 API Endpoints
 
-The Gradio interface is created in `interface.py` and launched via `app.py`:
+### 📍 `GET /`
 
-```python
-from interface import create_chatbot_interface
+> Returns welcome message and API metadata.
 
-if __name__ == "__main__":
-    app = create_chatbot_interface()
-    app.launch(server_name="0.0.0.0", server_port=8000)
-```
+**Response:**
 
----
-
-## 🌐 Live Hosted Version
-
-The app is deployed on Render and available at:
-
-🔗 **[https://alumna-krip-ai.onrender.com](https://alumna-krip-ai.onrender.com)**
-
----
-
-## 📄 Example `.env` (Optional)
-
-```env
-GROQ_API_KEY=<GROQ_API_KEY>
+```json
+{
+  "message": "Welcome to Alumna Krip AI - College Counselor API",
+  "version": "1.0.0",
+  "status": "running",
+  "endpoints": {
+    "chat": "/chat",
+    "recommendations": "/recommendations",
+    "profile": "/profile/{session_id}",
+    "sessions": "/sessions",
+    "colleges": "/colleges"
+  },
+  "documentation": "/docs"
+}
 ```
 
 ---
 
-## 🛡️ Security Notes
+### 🧠 `POST /chat`
 
-* CORS is enabled for development (`allow_origins=["*"]`). Restrict this in production.
-* No personal data is stored unless explicitly logged.
-* SQLite used for logs; switch to PostgreSQL or MongoDB for scaling.
+Start or continue a counseling session.
+
+**Request:**
+
+```json
+{
+  "message": "Hi, I scored 92% and want to pursue engineering.",
+  "session_id": "optional"
+}
+```
+
+**Response:**
+
+```json
+{
+  "response": "That's great! What's your budget range for college fees?",
+  "session_id": "session_20250623_123456_0",
+  "profile": {
+    "grade_12_percentage": 92
+  },
+  "sufficient_info": false,
+  "recommendations": null
+}
+```
 
 ---
 
-## 🙌 Author
+### 🎓 `POST /recommendations`
 
-**Aayush Gid**
-📧 [aayushgid598@gmail.com](mailto:aayushgid598@gmail.com)
-🌐 [github.com/aayush598](https://github.com/aayush598)
+Get college recommendations.
+
+**Request:**
+
+```json
+{
+  "session_id": "session_20250623_123456_0"
+}
+```
+
+OR
+
+```json
+{
+  "profile_data": {
+    "grade_12_percentage": 92,
+    "jee_score": 5000,
+    "budget_max": 800000,
+    "preferred_location": "South India",
+    "preferred_stream": "Engineering",
+    "specialization_interest": "Computer Science"
+  },
+  "max_results": 5
+}
+```
+
+**Response:**
+
+```json
+{
+  "recommendations": [
+    {
+      "name": "IIT Madras",
+      "location": "Chennai, Tamil Nadu",
+      "fees": 200000,
+      "match_score": 95.0,
+      "match_reasons": ["Top CS program", "Great placements"]
+    }
+  ],
+  "total_found": 3,
+  "returned": 1,
+  "profile_used": { ... }
+}
+```
+
+---
+
+### 🧑‍🎓 `GET /profile/{session_id}`
+
+Get student profile data.
+
+**Response:**
+
+```json
+{
+  "session_id": "session_20250623_123456_0",
+  "profile": {
+    "grade_12_percentage": 92,
+    "preferred_stream": "Engineering"
+  },
+  "sufficient_info": false,
+  "extraction_history": [ ... ]
+}
+```
+
+---
+
+### 🔧 `PUT /profile/{session_id}`
+
+Update profile manually.
+
+**Request:**
+
+```json
+{
+  "session_id": "session_20250623_123456_0",
+  "profile_data": {
+    "category": "General",
+    "state_of_residence": "Karnataka"
+  }
+}
+```
+
+---
+
+### 🧾 `GET /sessions`
+
+List all sessions.
+
+**Response:**
+
+```json
+[
+  {
+    "session_id": "session_20250623_123456_0",
+    "created_at": "2025-06-23T14:22:11",
+    "status": "active",
+    "message_count": 4
+  }
+]
+```
+
+---
+
+### 🗑️ `DELETE /sessions/{session_id}`
+
+Soft delete a session.
+
+**Response:**
+
+```json
+{
+  "message": "Session session_20250623_123456_0 deleted successfully"
+}
+```
+
+---
+
+### 🏛️ `GET /colleges`
+
+Get college database with optional filters.
+
+**Example Query:**
+
+```
+GET /colleges?stream=Computer Science&location=South India&max_fees=800000
+```
+
+---
+
+### 📊 `GET /analytics`
+
+Basic usage stats.
+
+**Response:**
+
+```json
+{
+  "total_sessions": 12,
+  "active_sessions": 3,
+  "total_messages": 55,
+  "completed_sessions": 6,
+  "completion_rate": "50.0%",
+  "endpoint_usage": [
+    { "endpoint": "/chat", "calls": 30 },
+    { "endpoint": "/recommendations", "calls": 10 }
+  ]
+}
+```
+
+---
+
+## 🧪 Testing with test_project.py
+
+You can use the script `test_project.py` to simulate and validate API behavior.
+
+```bash
+python test_project.py
+```
+
+This will:
+
+* Run a full counseling conversation
+* Validate responses
+* Test all endpoints
+* Print recommendation and session summaries
+
+---
+
+## 📁 Project Structure
+
+```
+.
+├── main.py
+├── test_project.py
+├── counselor.py
+├── student_profile.py
+├── college_database.py
+├── requirements.txt
+├── Dockerfile
+├── README.md
+└── counselor_api.db
+```
+
+---
+
+## 📬 Contact
+
+**Author:** Aayush Gid
+**Email:** [aayushgid598@gmail.com](mailto:aayushgid598@gmail.com)
+**GitHub:** [https://github.com/aayush598](https://github.com/aayush598)
 
 ---
 
 ## 📜 License
 
-This project is licensed under the **MIT License**.
-
----
+This project is licensed under the MIT License. Feel free to use and modify it.
