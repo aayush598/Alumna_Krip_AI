@@ -239,9 +239,28 @@ init_database()
 active_sessions: Dict[str, DynamicCollegeCounselorChatbot] = {}
 
 def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCounselorChatbot]:
-    """Get existing session or create new one"""
     if session_id and session_id in active_sessions:
         return session_id, active_sessions[session_id]
+    
+    # Check DB for session
+    if session_id:
+        try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute("SELECT profile_data, sufficient_info FROM sessions WHERE session_id = ?", (session_id,))
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                profile_data_json, sufficient_info = row
+                profile_data = json.loads(profile_data_json)
+                counselor = DynamicCollegeCounselorChatbot()
+                counselor.student_profile = DynamicStudentProfile(**profile_data)
+                counselor.sufficient_info_collected = bool(sufficient_info)
+                active_sessions[session_id] = counselor
+                return session_id, counselor
+        except Exception as e:
+            print(f"Session fetch error: {e}")
     
     # Create new session
     new_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(active_sessions)}"
@@ -618,7 +637,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     print("Starting Alumna Krip AI - College Counselor API...")
     uvicorn.run(
-        "test1:app",  # Change from "main:app"
+        "main:app",  # Change from "main:app"
         host="0.0.0.0",
         port=8000,
         reload=True,

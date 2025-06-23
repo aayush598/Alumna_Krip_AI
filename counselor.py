@@ -106,50 +106,82 @@ class DynamicCollegeCounselorChatbot:
             print(f"❌ Profile initialization error: {e}")
 
     def dynamic_information_extraction(self, user_message):
-        try:
-            current_profile = self.student_profile.model_dump()
-            prompt = f"""
-            You are an expert information extraction system for educational counseling.
+            try:
+                current_profile = self.student_profile.model_dump()
+                profile_summary = {
+                    k: v for k, v in current_profile.items()
+                    if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']
+                }
 
-            CURRENT STUDENT PROFILE:
-            {json.dumps({k: v for k, v in current_profile.items() if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']}, indent=2)}
+                prompt = f"""
+        You are an expert educational counselor AI tasked with extracting structured profile data from student conversations.
 
-            USER MESSAGE: "{user_message}"
+        CURRENT PROFILE:
+        {json.dumps(profile_summary, indent=2)}
 
-            Extract ALL relevant educational information from this message. Return a JSON object with these categories:
-            academic_performance, preferences, constraints, personal_info, goals_interests, additional, confidence
+        USER MESSAGE: "{user_message}"
 
-            IMPORTANT:
-            - Convert budgets like '5 lakhs' → 500000
-            - Normalize exam names
-            - Output valid JSON only
+        Extract relevant educational details and return only a **valid JSON** object with this schema:
 
-            EXAMPLE OUTPUT:
-            {{
-              "academic_performance": {{
-                "grade_12_percentage": {{"value": 85.5, "confidence": 0.9}}
-              }},
-              ...
-            }}
-            """
+        {{
+        "academic_performance": {{
+            "grade_12_percentage": {{"value": float, "confidence": 0.0-1.0}},
+            "grade_10_percentage": {{...}},
+            "cgpa": {{...}},
+            "jee_score": {{...}}, "neet_score": {{...}}, "sat_score": {{...}}, "gre_score": {{...}}, "gate_score": {{...}}
+        }},
+        "preferences": {{
+            "preferred_stream": {{...}},
+            "preferred_location": {{...}},
+            "preferred_course_type": {{...}}
+        }},
+        "constraints": {{
+            "budget_min": {{...}},
+            "budget_max": {{...}}
+        }},
+        "personal_info": {{
+            "gender": {{...}},
+            "category": {{...}},
+            "state_of_residence": {{...}}
+        }},
+        "goals_interests": {{
+            "career_goal": {{...}},
+            "specialization_interest": {{...}},
+            "extracurriculars": {{...}}
+        }},
+        "additional": {{
+            "any_other_info": {{...}}
+        }},
+        "confidence": {{
+            "extraction_quality": 0.0-1.0
+        }}
+        }}
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=800
-            )
+        RULES:
+        - Convert budget like "5 lakh" → 500000
+        - Normalize gender and category
+        - Return strictly valid JSON, no extra explanation
+                """
 
-            extracted_text = response.choices[0].message.content.strip()
-            match = re.search(r'\{.*\}', extracted_text, re.DOTALL)
-            if match:
-                data = json.loads(match.group())
-                self._process_extracted_data(data, user_message)
-                return True
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=800
+                )
 
-        except Exception as e:
-            print(f"❌ Extraction error: {e}")
-        return False
+                extracted_text = response.choices[0].message.content.strip()
+                print(f"extracted_text : {extracted_text}")
+
+                match = re.search(r'\{.*\}', extracted_text, re.DOTALL)
+                if match:
+                    data = json.loads(match.group())
+                    self._process_extracted_data(data, user_message)
+                    return True
+
+            except Exception as e:
+                print(f"❌ Extraction error: {e}")
+            return False
 
     def _process_extracted_data(self, extracted_data, original_message):
         current_data = self.student_profile.model_dump()
@@ -214,36 +246,55 @@ class DynamicCollegeCounselorChatbot:
                         updates_made.append(f"additional_{field_name}: {info['value']}")
 
         try:
-            self.student_profile = DynamicStudentProfile(**current_data)
+            # Merge updated values carefully into existing profile
+            updated_profile_data = self.student_profile.model_dump()
+
+            for key, value in current_data.items():
+                if key in ['additional_info', 'confidence_scores', 'extraction_timestamps']:
+                    updated_profile_data[key].update(value)  # Merge dicts
+                elif value is not None:
+                    updated_profile_data[key] = value  # Only overwrite non-null fields
+
+            # Update profile object
+            self.student_profile = DynamicStudentProfile(**updated_profile_data)
+
+            # Record extraction history
             self.extraction_history.append({
                 "timestamp": timestamp,
                 "message": original_message,
                 "extracted_fields": updates_made,
-                "total_fields_now": len([k for k, v in current_data.items() if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']])
+                "total_fields_now": len([
+                    k for k, v in updated_profile_data.items()
+                    if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']
+                ])
             })
+            
             print(f"📊 Updated fields: {updates_made}")
             self._save_profile()
+
         except Exception as e:
             print(f"❌ Profile validation error: {e}")
+
 
     def assess_information_sufficiency(self):
         profile_data = self.student_profile.model_dump()
         non_empty = {k: v for k, v in profile_data.items() if v and k not in ['confidence_scores', 'extraction_timestamps']}
 
         prompt = f"""
-        Assess if we have sufficient information for recommendations.
+    You are a strict JSON-only AI. Given the student's profile, determine if enough data exists for college recommendations.
 
-        STUDENT DATA:
-        {json.dumps(non_empty, indent=2)}
+    STUDENT PROFILE:
+    {json.dumps(non_empty, indent=2)}
 
-        Return:
-        {{
-          "sufficient_for_recommendations": true/false,
-          "confidence_level": 0.0-1.0,
-          "missing_critical_info": [],
-          "next_conversation_focus": "field",
-          "reasoning": "explanation"
-        }}
+    Return ONLY a valid JSON object with the following structure and nothing else:
+
+    {{
+    "sufficient_for_recommendations": true/false,
+    "confidence_level": float (0.0 to 1.0),
+    "missing_critical_info": [list of fields],
+    "next_conversation_focus": "field_name",
+    "reasoning": "short explanation"
+    }}
         """
 
         try:
@@ -254,16 +305,23 @@ class DynamicCollegeCounselorChatbot:
                 max_tokens=400
             )
 
-            text = response.choices[0].message.content.strip()
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            raw_text = response.choices[0].message.content.strip()
+
+            # 🧼 Clean markdown fences if present
+            raw_text = re.sub(r"^```json|```$", "", raw_text, flags=re.IGNORECASE).strip()
+
+            # Extract JSON object safely
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if match:
-                result = json.loads(match.group())
+                json_str = match.group()
+                result = json.loads(json_str)
                 self.sufficient_info_collected = result.get("sufficient_for_recommendations", False)
                 return result
 
         except Exception as e:
             print(f"❌ Assessment error: {e}")
 
+        # Fallback logic
         essential = ['grade_12_percentage', 'preferred_stream', 'budget_max']
         has_info = any(getattr(self.student_profile, f, None) for f in essential)
         self.sufficient_info_collected = has_info
@@ -272,7 +330,7 @@ class DynamicCollegeCounselorChatbot:
             "confidence_level": 0.5,
             "missing_critical_info": [],
             "next_conversation_focus": "academic info",
-            "reasoning": "Fallback"
+            "reasoning": "Fallback due to parse error"
         }
 
     def generate_personalized_recommendations(self):
