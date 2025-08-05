@@ -10,11 +10,14 @@ from datetime import datetime
 import tempfile
 from pathlib import Path
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 # Import your existing modules (make sure these files exist)
 try:
-    from counselor import DynamicCollegeCounselorChatbot
-    from student_profile import DynamicStudentProfile
+    from counselor import DynamicCollegeCounselorChatbot, DynamicStudentProfile
+    from student_profile import DynamicStudentProfile  # Fallback import
     from college_database import get_college_database
     print("✅ Successfully imported required modules")
 except ImportError as e:
@@ -30,11 +33,14 @@ except ImportError as e:
             return self.__dict__
     
     class DynamicCollegeCounselorChatbot:
-        def __init__(self):
+        def __init__(self, api_key=None):
             self.name = "AI Counselor"
             self.student_profile = DynamicStudentProfile()
             self.sufficient_info_collected = False
             self.extraction_history = []
+            self.conversation_stage = "greeting"
+            self.message_count = 0
+            self.recommendations_provided = False
         
         def chat(self, message, context):
             # Simple mock response
@@ -155,6 +161,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==================== API KEY CONFIGURATION ====================
+
+# Set your OpenAI API key here - replace with your actual key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 # ==================== DATABASE SETUP ====================
 
 DB_NAME = "counselor_api.db"
@@ -174,7 +184,10 @@ def init_database():
                 status TEXT,
                 message_count INTEGER DEFAULT 0,
                 profile_data TEXT,
-                sufficient_info BOOLEAN DEFAULT FALSE
+                sufficient_info BOOLEAN DEFAULT FALSE,
+                conversation_stage TEXT DEFAULT 'greeting',
+                extraction_history TEXT DEFAULT '[]',
+                conversation_history TEXT DEFAULT '[]'
             )
         """)
         
@@ -247,16 +260,34 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
         try:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-            cursor.execute("SELECT profile_data, sufficient_info FROM sessions WHERE session_id = ?", (session_id,))
+            cursor.execute("""
+                SELECT profile_data, sufficient_info, conversation_stage, extraction_history, conversation_history 
+                FROM sessions WHERE session_id = ?
+            """, (session_id,))
             row = cursor.fetchone()
             conn.close()
 
             if row:
-                profile_data_json, sufficient_info = row
-                profile_data = json.loads(profile_data_json)
-                counselor = DynamicCollegeCounselorChatbot()
-                counselor.student_profile = DynamicStudentProfile(**profile_data)
+                profile_data_json, sufficient_info, conversation_stage, extraction_history_json, conversation_history_json = row
+                
+                # Restore counselor from database
+                counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+                
+                # Restore profile
+                if profile_data_json:
+                    profile_data = json.loads(profile_data_json)
+                    counselor.student_profile = DynamicStudentProfile(**profile_data)
+                
+                # Restore other states
                 counselor.sufficient_info_collected = bool(sufficient_info)
+                counselor.conversation_stage = conversation_stage or "greeting"
+                
+                if extraction_history_json:
+                    counselor.extraction_history = json.loads(extraction_history_json)
+                
+                if conversation_history_json:
+                    counselor.conversation_history = json.loads(conversation_history_json)
+                
                 active_sessions[session_id] = counselor
                 return session_id, counselor
         except Exception as e:
@@ -264,22 +295,30 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
     
     # Create new session
     new_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(active_sessions)}"
-    counselor = DynamicCollegeCounselorChatbot()
-    active_sessions[new_session_id] = counselor
+    
+    try:
+        counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+        active_sessions[new_session_id] = counselor
+    except Exception as e:
+        print(f"Error creating counselor: {e}")
+        # Fallback to mock counselor if real one fails
+        counselor = DynamicCollegeCounselorChatbot()
+        active_sessions[new_session_id] = counselor
     
     # Save session to database
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO sessions (session_id, created_at, updated_at, status, profile_data)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, created_at, updated_at, status, profile_data, conversation_stage)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             new_session_id,
             datetime.now().isoformat(),
             datetime.now().isoformat(),
             "active",
-            json.dumps({})
+            json.dumps({}),
+            "greeting"
         ))
         conn.commit()
         conn.close()
@@ -293,14 +332,27 @@ def update_session_in_db(session_id: str, counselor: DynamicCollegeCounselorChat
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
+        
+        # Prepare data for storage
+        profile_data = json.dumps(counselor.student_profile.model_dump())
+        extraction_history = json.dumps(counselor.extraction_history)
+        
+        # Store conversation history (limit to recent messages to prevent excessive storage)
+        recent_conversation = counselor.conversation_history[-20:] if hasattr(counselor, 'conversation_history') else []
+        conversation_history = json.dumps(recent_conversation)
+        
         cursor.execute("""
             UPDATE sessions 
-            SET updated_at = ?, profile_data = ?, sufficient_info = ?
+            SET updated_at = ?, profile_data = ?, sufficient_info = ?, conversation_stage = ?, 
+                extraction_history = ?, conversation_history = ?
             WHERE session_id = ?
         """, (
             datetime.now().isoformat(),
-            json.dumps(counselor.student_profile.model_dump()),
+            profile_data,
             counselor.sufficient_info_collected,
+            getattr(counselor, 'conversation_stage', 'greeting'),
+            extraction_history,
+            conversation_history,
             session_id
         ))
         conn.commit()
@@ -336,19 +388,28 @@ async def chat_with_counselor(request: ChatMessage, background_tasks: Background
         # Get or create session
         session_id, counselor = get_or_create_session(request.session_id)
         
-        # Process the message
+        # Process the message using the actual counselor logic
         response = counselor.chat(request.message, [])
+        
+        # Update sufficient info flag based on conversation stage
+        if hasattr(counselor, 'conversation_stage'):
+            if counselor.conversation_stage == "ready_for_recommendations":
+                counselor.sufficient_info_collected = True
         
         # Get recommendations if sufficient info is collected
         recommendations = None
-        if counselor.sufficient_info_collected:
-            recommendations = counselor.generate_personalized_recommendations()
+        if counselor.sufficient_info_collected or (hasattr(counselor, 'conversation_stage') and counselor.conversation_stage == "ready_for_recommendations"):
+            try:
+                recommendations = counselor.generate_personalized_recommendations()
+            except Exception as e:
+                print(f"Recommendation generation error: {e}")
+                recommendations = None
         
         # Prepare response
         chat_response = ChatResponse(
             response=response,
             session_id=session_id,
-            profile=counselor.student_profile.model_dump(),  # Fixed: was student_profile
+            profile=counselor.student_profile.model_dump(),
             sufficient_info=counselor.sufficient_info_collected,
             recommendations=recommendations
         )
@@ -394,9 +455,16 @@ async def get_recommendations(request: RecommendationRequest):
             counselor = active_sessions[request.session_id]
         elif request.profile_data:
             # Create temporary counselor with provided profile data
-            counselor = DynamicCollegeCounselorChatbot()
-            counselor.student_profile = DynamicStudentProfile(**request.profile_data)
-            counselor.sufficient_info_collected = True
+            try:
+                counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+                counselor.student_profile = DynamicStudentProfile(**request.profile_data)
+                counselor.sufficient_info_collected = True
+            except Exception as e:
+                print(f"Error creating counselor for recommendations: {e}")
+                # Fallback to mock counselor
+                counselor = DynamicCollegeCounselorChatbot()
+                counselor.student_profile = DynamicStudentProfile(**request.profile_data)
+                counselor.sufficient_info_collected = True
         else:
             raise HTTPException(status_code=400, detail="Either session_id or profile_data must be provided")
         
@@ -428,7 +496,9 @@ async def get_student_profile(session_id: str):
         "session_id": session_id,
         "profile": counselor.student_profile.model_dump(),
         "sufficient_info": counselor.sufficient_info_collected,
-        "extraction_history": counselor.extraction_history
+        "extraction_history": counselor.extraction_history,
+        "conversation_stage": getattr(counselor, 'conversation_stage', 'unknown'),
+        "message_count": getattr(counselor, 'message_count', 0)
     }
 
 @app.put("/profile/{session_id}", tags=["Profile"])
@@ -621,6 +691,13 @@ async def startup_event():
     print(f"📊 Database: {DB_NAME}")
     print("🌐 Server will be available at: http://localhost:8000")
     print("📖 API Documentation: http://localhost:8000/docs")
+    
+    # Test OpenAI API key
+    if OPENAI_API_KEY and OPENAI_API_KEY.startswith("sk-"):
+        print("✅ OpenAI API key configured")
+    else:
+        print("⚠️  Warning: OpenAI API key not properly configured - using mock responses")
+    
     print("✅ API is ready to serve requests!")
 
 @app.on_event("shutdown")
@@ -637,7 +714,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     print("Starting Alumna Krip AI - College Counselor API...")
     uvicorn.run(
-        "main:app",  # Change from "main:app"
+        "main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
