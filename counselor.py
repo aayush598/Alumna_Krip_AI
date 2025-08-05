@@ -8,14 +8,9 @@ from pydantic import BaseModel, Field, field_validator
 import re
 from pathlib import Path
 import tempfile
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
-from pydantic import BaseModel, Field, field_validator
-from typing import Dict, List, Any, Optional, Union
-import re
+# Removed the dotenv import since we're not using environment variables anymore
+# from dotenv import load_dotenv
 
 class DynamicStudentProfile(BaseModel):
     # Core academic information
@@ -92,18 +87,16 @@ class DynamicStudentProfile(BaseModel):
 
 class DynamicCollegeCounselorChatbot:
     """
-    Enhanced AI College Counselor with dynamic information extraction capabilities.
-    Uses LLM to intelligently extract and categorize any relevant information from conversations.
+    Enhanced AI College Counselor with natural conversation flow and selective information extraction.
     """
 
-    def __init__(self, name="Lauren"):
+    def __init__(self, name="Lauren", api_key=None):
         self.name = name
         self.model = "gpt-3.5-turbo"
         
-        # Check for API key
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Use provided API key or raise error
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+            raise ValueError("API key must be provided directly to the constructor")
         
         self.client = OpenAI(api_key=api_key)
         
@@ -112,6 +105,11 @@ class DynamicCollegeCounselorChatbot:
         self.conversation_context = []
         self.extraction_history = []
 
+        # Conversation state tracking
+        self.conversation_stage = "greeting"  # greeting -> getting_to_know -> information_gathering -> recommendations
+        self.message_count = 0
+        self.last_extraction_attempt = 0
+        
         # Tracking flags
         self.sufficient_info_collected = False
         self.recommendations_provided = False
@@ -121,40 +119,41 @@ class DynamicCollegeCounselorChatbot:
         self.profiles_dir = self.create_profiles_directory()
         self.initialize_profile_file()
         
-        # Initialize conversation with system prompt
+        # Initialize conversation with a natural system prompt
         self.conversation_history = [
-            {"role": "system", "content": self._get_system_prompt()}
+            {"role": "system", "content": self._get_natural_system_prompt()}
         ]
         
         # Enhanced college database with more diverse options
         self.colleges = self._initialize_college_database()
 
-    def _get_system_prompt(self):
-        """Generate dynamic system prompt for the counselor"""
+    def _get_natural_system_prompt(self):
+        """Generate a natural, conversational system prompt"""
         return f"""
-        You are {self.name}, an intelligent AI college counselor specializing in Indian higher education.
+        You are {self.name}, a friendly and experienced college counselor who specializes in helping Indian students find the right colleges and courses.
 
-        Your primary objectives:
-        1. Engage in natural, friendly conversation with students
-        2. Intelligently gather information about their academic background, preferences, and goals
-        3. Provide personalized college recommendations when sufficient information is collected
+        Your personality:
+        - Warm, approachable, and genuinely interested in helping students
+        - Patient and understanding - you know college selection can be stressful
+        - Professional but not overly formal - like talking to a helpful older sibling
+        - Encouraging and positive, always highlighting possibilities
 
-        Key conversation principles:
-        - Be warm, encouraging, and supportive
-        - Ask follow-up questions naturally based on what the student shares
-        - Don't overwhelm with too many questions at once
-        - Acknowledge and build upon information they provide
-        - Guide the conversation toward relevant details needed for recommendations
+        Your conversation approach:
+        1. Start with a genuine greeting and get to know the student as a person
+        2. Show interest in their background, dreams, and concerns naturally
+        3. Ask follow-up questions based on what they share, not from a checklist
+        4. Only move to specific academic details once rapport is established
+        5. Provide recommendations when you have enough information, not before
 
-        Information you should gather (but don't ask all at once):
-        - Academic performance (grades, CGPA, exam scores)
-        - Preferred courses/streams and career goals
-        - Budget constraints and location preferences
-        - Personal background that might affect college choice
-        - Any specific requirements or constraints
+        Key principles:
+        - Have natural conversations - don't rush to collect data
+        - Ask ONE question at a time, not multiple
+        - Show genuine interest in their responses
+        - Acknowledge their concerns and validate their feelings
+        - Share encouragement and insights naturally
+        - Only extract information when it's clearly relevant and explicitly mentioned
 
-        Adapt your conversation style to the student's communication pattern.
-        When you have enough information to make good recommendations, transition to providing them.
+        Remember: You're counseling a person, not filling out a form. Build trust first, then gather information naturally.
         """
 
     def _initialize_college_database(self):
@@ -235,76 +234,96 @@ class DynamicCollegeCounselorChatbot:
         except Exception as e:
             print(f"❌ Profile initialization error: {e}")
 
-    def dynamic_information_extraction(self, user_message):
+    def should_extract_information(self, user_message):
         """
-        Use LLM to dynamically extract any relevant information from user messages.
-        This is the core dynamic extraction engine.
+        Determine if this message contains information worth extracting.
+        Only extract when there's clear educational/academic content.
         """
+        # Don't extract from greetings or very short messages
+        if len(user_message.split()) < 3:
+            return False
+            
+        # Don't extract too frequently
+        if self.message_count - self.last_extraction_attempt < 2:
+            return False
+            
+        # Look for educational keywords
+        educational_keywords = [
+            'grade', 'marks', 'percentage', 'cgpa', 'score', 'rank',
+            'jee', 'neet', 'sat', 'gate', 'exam', 'test',
+            'engineering', 'medical', 'commerce', 'arts', 'science',
+            'college', 'university', 'course', 'stream', 'branch',
+            'budget', 'fees', 'cost', 'lakhs', 'crores',
+            'location', 'city', 'state', 'prefer',
+            'career', 'job', 'future', 'goal', 'interest'
+        ]
+        
+        message_lower = user_message.lower()
+        has_educational_content = any(keyword in message_lower for keyword in educational_keywords)
+        
+        return has_educational_content
+
+    def smart_information_extraction(self, user_message):
+        """
+        Smarter information extraction that only activates when relevant content is detected.
+        """
+        if not self.should_extract_information(user_message):
+            return False
+
         try:
             # Get current profile state
             current_profile = self.student_profile.model_dump()
 
-            # Create extraction prompt
+            # Create focused extraction prompt
             extraction_prompt = f"""
-            You are an expert information extraction system for educational counseling.
+            Extract ONLY clear, specific educational information from this student message.
 
-            CURRENT STUDENT PROFILE:
+            STUDENT MESSAGE: "{user_message}"
+
+            CURRENT PROFILE (don't duplicate):
             {json.dumps({k: v for k, v in current_profile.items() if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']}, indent=2)}
 
-            USER MESSAGE: "{user_message}"
+            Extract ONLY if information is:
+            1. Explicitly mentioned (not implied or assumed)
+            2. Educational/academic in nature
+            3. Not already in the current profile
+            4. Specific and clear (not vague)
 
-            Extract ALL relevant educational information from this message. Return a JSON object with these categories:
-
-            1. ACADEMIC_PERFORMANCE: grades, percentages, CGPA, exam scores (JEE, NEET, SAT, etc.)
-            2. PREFERENCES: preferred courses, streams, locations, college types
-            3. CONSTRAINTS: budget (convert lakhs/crores to numbers), timeline, specific requirements
-            4. PERSONAL_INFO: gender, category, state of residence, background details
-            5. GOALS_INTERESTS: career goals, specialization interests, extracurriculars
-            6. ADDITIONAL: any other relevant information not covered above
-            7. CONFIDENCE: rate confidence (0-1) for each extracted piece of information
-
-            IMPORTANT RULES:
-            - Only extract information explicitly mentioned or clearly implied
-            - Convert budget mentions: "5 lakhs" → 500000, "2 crores" → 20000000
-            - Normalize exam names: "JEE Main" → "jee_score", "NEET" → "neet_score"
-            - For grade ranges like "80-85%", use the average: 82.5
-            - If multiple pieces of info in one category, separate them
-            - Return ONLY valid JSON, no explanations
-
-            EXAMPLE OUTPUT:
+            Return JSON with extracted information:
             {{
-                "academic_performance": {{
-                    "grade_12_percentage": {{"value": 85.5, "confidence": 0.9}}
-                }},
-                "preferences": {{
-                    "preferred_stream": {{"value": "Computer Science", "confidence": 0.8}},
-                    "preferred_location": {{"value": "Bangalore", "confidence": 0.7}}
-                }},
-                "constraints": {{
-                    "budget_max": {{"value": 800000, "confidence": 0.9}}
-                }},
-                "additional": {{
-                    "hobby": {{"value": "coding competitions", "confidence": 0.6}}
-                }}
+                "academic_scores": {{"field_name": {{"value": actual_value, "confidence": 0.0-1.0}}}},
+                "preferences": {{"field_name": {{"value": "actual_value", "confidence": 0.0-1.0}}}},
+                "constraints": {{"field_name": {{"value": actual_value, "confidence": 0.0-1.0}}}},
+                "personal": {{"field_name": {{"value": "actual_value", "confidence": 0.0-1.0}}}},
+                "goals": {{"field_name": {{"value": "actual_value", "confidence": 0.0-1.0}}}}
             }}
+
+            If no clear educational information is found, return: {{"no_extraction": true}}
             """
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": extraction_prompt}],
                 temperature=0.1,
-                max_tokens=800,
+                max_tokens=500,
             )
             
             extracted_text = response.choices[0].message.content.strip()
-            print(f"🔍 Raw extraction: {extracted_text[:200]}...")
             
             # Parse JSON response
             json_match = re.search(r'\{.*\}', extracted_text, re.DOTALL)
             if json_match:
                 extracted_data = json.loads(json_match.group())
-                self._process_extracted_data(extracted_data, user_message)
-                return True
+                
+                # Check if extraction found anything meaningful
+                if extracted_data.get('no_extraction'):
+                    return False
+                    
+                # Process extracted data if meaningful content found
+                if any(category for category in extracted_data.values() if isinstance(category, dict) and category):
+                    self._process_extracted_data(extracted_data, user_message)
+                    self.last_extraction_attempt = self.message_count
+                    return True
 
         except Exception as e:
             print(f"❌ Extraction error: {e}")
@@ -319,7 +338,7 @@ class DynamicCollegeCounselorChatbot:
 
         # Field mapping for different categories
         field_mappings = {
-            'academic_performance': {
+            'academic_scores': {
                 'grade_10_percentage': 'grade_10_percentage',
                 'grade_12_percentage': 'grade_12_percentage',
                 'cgpa': 'cgpa',
@@ -338,12 +357,12 @@ class DynamicCollegeCounselorChatbot:
                 'budget_min': 'budget_min',
                 'budget_max': 'budget_max'
             },
-            'personal_info': {
+            'personal': {
                 'gender': 'gender',
                 'category': 'category',
                 'state_of_residence': 'state_of_residence'
             },
-            'goals_interests': {
+            'goals': {
                 'career_goal': 'career_goal',
                 'specialization_interest': 'specialization_interest',
                 'extracurriculars': 'extracurriculars'
@@ -354,16 +373,9 @@ class DynamicCollegeCounselorChatbot:
 
         # Process each category
         for category, fields in extracted_data.items():
-            if category == 'additional':
-                # Handle additional information
-                for key, info in fields.items():
-                    if isinstance(info, dict) and 'value' in info:
-                        current_data['additional_info'][key] = info['value']
-                        current_data['confidence_scores'][f"additional_{key}"] = info.get('confidence', 0.5)
-                        current_data['extraction_timestamps'][f"additional_{key}"] = timestamp
-                        updates_made.append(f"additional_{key}: {info['value']}")
+            if not isinstance(fields, dict):
                 continue
-
+                
             # Process mapped fields
             mapping = field_mappings.get(category, {})
             for field_name, info in fields.items():
@@ -395,78 +407,44 @@ class DynamicCollegeCounselorChatbot:
                 "total_fields_now": len([k for k, v in current_data.items() if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']])
             })
 
-            print(f"📊 Updated fields: {updates_made}")
-            self._save_profile()
+            if updates_made:
+                print(f"📊 Updated fields: {updates_made}")
+                self._save_profile()
 
         except Exception as e:
             print(f"❌ Profile validation error: {e}")
 
-    def assess_information_sufficiency(self):
+    def assess_conversation_readiness(self):
         """
-        Dynamically assess if we have sufficient information for recommendations.
-        Uses LLM to make intelligent decisions about readiness.
+        Assess if we're ready to provide recommendations based on conversation stage and information.
         """
-
         profile_data = self.student_profile.model_dump()
         non_empty_fields = {k: v for k, v in profile_data.items()
                            if v is not None and v != {} and k not in ['confidence_scores', 'extraction_timestamps']}
 
-        assessment_prompt = f"""
-        Assess if we have sufficient information to provide meaningful college recommendations.
+        # Need at least some basic information before recommendations
+        if len(non_empty_fields) < 3:
+            return False
 
-        CURRENT STUDENT INFORMATION:
-        {json.dumps(non_empty_fields, indent=2, default=str)}
-
-        CRITERIA FOR ASSESSMENT:
-        1. Academic Performance: Do we have any grades/scores?
-        2. Preferences: Do we know what they want to study or where?
-        3. Constraints: Do we understand their limitations (budget, location, etc.)?
-        4. Goals: Do we have some sense of their career direction?
-
-        Return JSON response:
-        {{
-            "sufficient_for_recommendations": true/false,
-            "confidence_level": 0.0-1.0,
-            "missing_critical_info": ["list", "of", "gaps"],
-            "next_conversation_focus": "what to ask about next",
-            "reasoning": "brief explanation"
-        }}
-
-        Be practical - we don't need perfect information, just enough to give helpful guidance.
-        """
+        # Check for minimum viable information
+        has_academic_info = any(field in non_empty_fields for field in ['grade_12_percentage', 'cgpa', 'jee_score', 'neet_score'])
+        has_preference_info = any(field in non_empty_fields for field in ['preferred_stream', 'career_goal', 'preferred_location'])
         
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": assessment_prompt}],
-                temperature=0.2,
-                max_tokens=400,
-            )
+        return has_academic_info and has_preference_info
 
-            assessment_text = response.choices[0].message.content.strip()
-            json_match = re.search(r'\{.*\}', assessment_text, re.DOTALL)
-
-            if json_match:
-                assessment = json.loads(json_match.group())
-                self.sufficient_info_collected = assessment.get('sufficient_for_recommendations', False)
-                print(f"📋 Sufficiency assessment: {assessment}")
-                return assessment
-
-        except Exception as e:
-            print(f"❌ Assessment error: {e}")
-
-        # Fallback: simple rule-based check
-        essential_fields = ['grade_12_percentage', 'preferred_stream', 'budget_max']
-        has_essential = any(getattr(self.student_profile, field, None) is not None for field in essential_fields)
-        self.sufficient_info_collected = has_essential
-
-        return {
-            "sufficient_for_recommendations": has_essential,
-            "confidence_level": 0.5,
-            "missing_critical_info": [],
-            "next_conversation_focus": "basic academic information",
-            "reasoning": "Fallback assessment"
-        }
+    def update_conversation_stage(self, user_message):
+        """Update conversation stage based on message content and history"""
+        message_lower = user_message.lower()
+        
+        # Determine stage transitions
+        if self.message_count <= 2 and any(greeting in message_lower for greeting in ['hi', 'hello', 'hey', 'good']):
+            self.conversation_stage = "greeting"
+        elif self.conversation_stage == "greeting" and self.message_count <= 4:
+            self.conversation_stage = "getting_to_know"
+        elif any(keyword in message_lower for keyword in ['grade', 'marks', 'score', 'college', 'course', 'stream']):
+            self.conversation_stage = "information_gathering"
+        elif self.assess_conversation_readiness():
+            self.conversation_stage = "ready_for_recommendations"
 
     def generate_personalized_recommendations(self):
         """Generate intelligent college recommendations based on collected profile"""
@@ -512,7 +490,7 @@ class DynamicCollegeCounselorChatbot:
             # Add base score for all colleges
             match_score += 10
             if not match_reasons:
-                match_reasons.append("General recommendation")
+                match_reasons.append("General recommendation based on profile")
 
             suitable_colleges.append({
                 **college,
@@ -526,91 +504,89 @@ class DynamicCollegeCounselorChatbot:
 
     def chat(self, message, history):
         """
-        Main chat processing function with dynamic information extraction
+        Main chat processing function with natural conversation flow
         """
-        print(f"💬 Processing: {message[:50]}...")
+        self.message_count += 1
+        print(f"💬 Message {self.message_count}: {message[:50]}...")
 
-        # Extract information dynamically
-        extraction_success = self.dynamic_information_extraction(message)
+        # Update conversation stage
+        self.update_conversation_stage(message)
+        
+        # Only attempt extraction if appropriate
+        extraction_attempted = False
+        if self.conversation_stage in ["information_gathering", "ready_for_recommendations"]:
+            extraction_attempted = self.smart_information_extraction(message)
 
-        # Add to conversation history
+        # Add user message to conversation history
         self.conversation_history.append({"role": "user", "content": message})
 
-        # Assess if we have sufficient information
-        if not self.sufficient_info_collected:
-            assessment = self.assess_information_sufficiency()
-
-            if self.sufficient_info_collected:
+        # Generate appropriate response based on conversation stage
+        try:
+            if self.conversation_stage == "ready_for_recommendations" and not self.recommendations_provided:
                 # Generate recommendations
                 recommendations = self.generate_personalized_recommendations()
+                
+                # Add context for recommendation response
+                context_prompt = f"""
+                The student is ready for personalized recommendations. Based on our conversation and their profile:
 
-                # Create recommendation prompt
-                rec_prompt = f"""
-                The student profile is now complete. Provide personalized college recommendations.
+                KEY STUDENT INFO:
+                {json.dumps({k: v for k, v in self.student_profile.model_dump().items() if v is not None and k not in ['additional_info', 'confidence_scores', 'extraction_timestamps']}, indent=2, default=str)}
 
-                STUDENT PROFILE:
-                {json.dumps({k: v for k, v in self.student_profile.model_dump().items() if v is not None}, indent=2, default=str)}
-
-                TOP COLLEGE MATCHES:
+                TOP MATCHES:
                 {json.dumps(recommendations[:3], indent=2, default=str)}
 
                 Provide a warm, comprehensive response that:
-                1. Acknowledges their shared information
-                2. Explains 3-4 top college recommendations with specific reasons
-                3. Mentions key factors like fees, location, admission requirements
-                4. Gives practical next steps for applications
-                5. Mentions they can download their complete profile
+                1. Acknowledges their patience and the information they've shared
+                2. Presents 3-4 specific college recommendations with clear reasons
+                3. Explains key factors like admission requirements, fees, and fit
+                4. Gives practical next steps for research and applications
+                5. Remains encouraging and supportive
 
-                Be encouraging and specific about why each college fits their profile.
+                Be specific about why each college matches their profile and goals.
                 """
-
-                self.conversation_history.append({"role": "system", "content": rec_prompt})
+                
+                self.conversation_history.append({"role": "system", "content": context_prompt})
                 self.recommendations_provided = True
-
-            else:
-                # Continue gathering information
-                next_focus = assessment.get('next_conversation_focus', 'your academic background')
-
-                continuation_prompt = f"""
-                Continue the natural conversation. The student just shared: "{message}"
-
-                Current information collected: {len([k for k, v in self.student_profile.model_dump().items() if v is not None])} fields
-
-                Assessment suggests focusing on: {next_focus}
-
-                Acknowledge what they shared and naturally guide toward: {next_focus}
-                Be conversational and encouraging. Don't overwhelm with questions.
-                """
-
-                self.conversation_history.append({"role": "system", "content": continuation_prompt})
-
-        # Generate response
-        try:
+            
+            # Generate natural response
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=self.conversation_history[-10:],  # Keep recent context
-                temperature=0.7,
-                max_tokens=1000,
+                messages=self.conversation_history[-8:],  # Keep recent context but not too much
+                temperature=0.8,  # More natural and varied responses
+                max_tokens=800,
+                frequency_penalty=0.3,  # Reduce repetition
+                presence_penalty=0.2    # Encourage topic variety
             )
 
             assistant_response = response.choices[0].message.content
 
         except Exception as e:
-            assistant_response = f"I apologize, but I encountered an error: {str(e)}"
+            assistant_response = f"I apologize, but I encountered a technical issue. Could you please share that again? I'm here to help you with your college search!"
             print(f"❌ Chat error: {e}")
 
-        # Add response to history
+        # Add response to history (but keep it manageable)
         self.conversation_history.append({"role": "assistant", "content": assistant_response})
+        
+        # Keep conversation history manageable
+        if len(self.conversation_history) > 20:
+            # Keep system prompt and recent messages
+            self.conversation_history = [self.conversation_history[0]] + self.conversation_history[-15:]
 
         return assistant_response
 
     def _save_profile(self):
         """Save current profile state to file"""
         try:
+            if self.conversation_stage == "ready_for_recommendations":
+                self.sufficient_info_collected = True
+                
             profile_data = {
                 "session_info": {
                     "updated": datetime.now().isoformat(),
                     "counselor": self.name,
+                    "conversation_stage": self.conversation_stage,
+                    "message_count": self.message_count,
                     "status": "Complete" if self.sufficient_info_collected else "In Progress"
                 },
                 "student_profile": self.student_profile.model_dump(),
@@ -631,6 +607,8 @@ class DynamicCollegeCounselorChatbot:
                 "session_info": {
                     "updated": datetime.now().isoformat(),
                     "counselor": self.name,
+                    "conversation_stage": self.conversation_stage,
+                    "total_messages": self.message_count,
                     "status": "Complete" if self.sufficient_info_collected else "In Progress"
                 },
                 "student_profile": self.student_profile.model_dump(),
@@ -642,20 +620,26 @@ class DynamicCollegeCounselorChatbot:
             return json.dumps({"error": f"Could not generate profile: {str(e)}"}, indent=2)
 
 
-def create_chatbot_interface():
-    """Create enhanced Gradio interface"""
-    counselor = DynamicCollegeCounselorChatbot(name="Lauren")
-    with gr.Blocks(title="Lauren - Dynamic AI College Counselor", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 🎓 Lauren - Your Dynamic AI College Counselor")
+def create_chatbot_interface(api_key):
+    """Create enhanced Gradio interface with natural conversation flow"""
+    if not api_key:
+        raise ValueError("API key must be provided to create the chatbot interface")
+    
+    counselor = DynamicCollegeCounselorChatbot(name="Lauren", api_key=api_key)
+    
+    with gr.Blocks(title="Lauren - Your Natural AI College Counselor", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 🎓 Lauren - Your AI College Counselor")
         gr.Markdown("""
-        Welcome! I'm Lauren, your AI college counselor. I use advanced conversation analysis to understand your needs and provide personalized recommendations.
-        Just chat naturally about your academic background, goals, and preferences - I'll automatically extract and organize the relevant information!
+        Hi! I'm Lauren, your friendly AI college counselor. I'm here to have a natural conversation about your educational journey and help you discover the perfect colleges for your goals.
+        
+        Just start by saying hello and telling me a bit about yourself. No need to fill out forms - we'll chat naturally and I'll learn about your needs as we go! 😊
         """)
+        
         chatbot = gr.Chatbot(height=600, show_copy_button=True, type="messages")
 
         with gr.Row():
             msg = gr.Textbox(
-                placeholder="Hi Lauren! I'm looking for college guidance. I scored 85% in 12th grade...",
+                placeholder="Hi Lauren! I'm a student looking for guidance with college selection...",
                 container=False,
                 scale=7
             )
@@ -663,53 +647,74 @@ def create_chatbot_interface():
 
         with gr.Row():
             clear = gr.Button("New Session", scale=1)
-            download_btn = gr.Button("📄 Download Profile", variant="secondary", scale=1)
+            download_btn = gr.Button("📄 Download Profile", variant="secondary", scale=1, visible=False)
 
         download_file = gr.File(label="Your Profile", visible=False)
 
         # Status display
-        status_display = gr.Markdown("🤖 **Status:** Ready to chat! I'll dynamically extract information as we talk.")
+        status_display = gr.Markdown("💫 **Status:** Ready to chat! Just say hello and let's get to know each other.")
 
-        # Initial greeting
+        # Natural initial greeting
         initial_greeting = {
             "role": "assistant",
             "content": """
-            👋 Hi there! I'm Lauren, your AI college counselor.
-            I'm here to help you find the perfect colleges based on your unique profile and goals. What makes me special is that I can understand and organize information from natural conversation - you don't need to fill out forms!
-            Just tell me about yourself, your academic background, what you're interested in studying, or any concerns you have about college selection. I'll automatically pick up on the important details and help guide you toward great options.
-            What would you like to share about your educational journey? 😊
+            Hi there! 👋 I'm Lauren, your AI college counselor, and I'm so glad you're here!
+
+            I know that choosing the right college can feel overwhelming - there are so many options, requirements to consider, and big decisions to make. But don't worry, that's exactly what I'm here for! 
+
+            I'd love to get to know you first. What's your name? And what brings you here today - are you currently in 12th grade, thinking about your next steps after graduation, or maybe exploring options for higher studies?
+
+            There's no rush at all. We can take this conversation at whatever pace feels comfortable for you! 😊
             """
         }
 
         def respond(message, chat_history):
             if not message.strip():
                 return chat_history, gr.update(), gr.update(visible=False)
+            
             response = counselor.chat(message, chat_history)
             chat_history.append({"role": "user", "content": message})
             chat_history.append({"role": "assistant", "content": response})
 
-            # Update status display based on conversation state
-            status_text = "📊 **Status:** Collecting information..."
-            if counselor.sufficient_info_collected:
-                status_text = "✅ **Status:** Ready with recommendations! You can download your profile."
+            # Update status display based on conversation stage
+            stage_messages = {
+                "greeting": "👋 Getting to know you - feel free to share at your own pace!",
+                "getting_to_know": "💭 Learning about your interests and background...",
+                "information_gathering": "📚 Understanding your academic profile and preferences...",
+                "ready_for_recommendations": "✅ Ready with personalized recommendations! You can download your profile."
+            }
+            
+            status_text = f"💫 **Status:** {stage_messages.get(counselor.conversation_stage, 'Having a great conversation!')}"
             status_display_value = gr.update(value=status_text)
 
-            # Make download button visible if sufficient info is collected
-            download_visibility = gr.update(visible=counselor.sufficient_info_collected)
+            # Make download button visible when recommendations are ready
+            download_visibility = gr.update(visible=(counselor.conversation_stage == "ready_for_recommendations"))
 
             return chat_history, status_display_value, download_visibility
 
         def download_profile():
-            profile_path = counselor.profile_filename
-            return gr.update(value=str(profile_path), visible=True)
+            if counselor.profile_filename and counselor.profile_filename.exists():
+                return gr.update(value=str(counselor.profile_filename), visible=True)
+            else:
+                # Create a temporary file with profile data
+                profile_content = counselor.get_profile_for_download()
+                temp_file = counselor.profiles_dir / f"profile_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(temp_file, 'w', encoding='utf-8') as f:
+                    f.write(profile_content)
+                return gr.update(value=str(temp_file), visible=True)
 
         def new_session():
             # Reset the counselor instance for a new session
-            counselor.__init__()
-            return [], gr.update(visible=False), gr.update(value="🤖 **Status:** Ready to chat! I'll dynamically extract information as we talk.")
+            nonlocal counselor
+            counselor = DynamicCollegeCounselorChatbot(name="Lauren", api_key=api_key)
+            return [initial_greeting], gr.update(visible=False), gr.update(value="💫 **Status:** Ready to chat! Just say hello and let's get to know each other.")
+
+        def clear_input():
+            return ""
 
         # Set up event handlers
-        submit.click(respond, [msg, chatbot], [chatbot, status_display, download_btn])
+        submit.click(respond, [msg, chatbot], [chatbot, status_display, download_btn]).then(clear_input, outputs=[msg])
+        msg.submit(respond, [msg, chatbot], [chatbot, status_display, download_btn]).then(clear_input, outputs=[msg])
         clear.click(new_session, outputs=[chatbot, download_file, status_display])
         download_btn.click(download_profile, outputs=[download_file])
 
@@ -720,5 +725,8 @@ def create_chatbot_interface():
 
 # Example usage
 if __name__ == "__main__":
-    app = create_chatbot_interface()
-    app.launch()
+    # Replace this with your actual OpenAI API key
+    YOUR_API_KEY = ""
+    
+    app = create_chatbot_interface(YOUR_API_KEY)
+    app.launch(debug=True)
