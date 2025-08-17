@@ -29,7 +29,7 @@ class DynamicCollegeCounselorBot:
 
     def __init__(self, name="Lauren", api_key=None):
         self.name = name
-        self.model = "gpt-3.5-turbo"
+        self.model = "gpt-4o"
         
         if not api_key:
             raise ValueError("API key must be provided directly to the constructor")
