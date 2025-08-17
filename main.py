@@ -16,7 +16,7 @@ load_dotenv()  # Load environment variables from .env file
 
 # Import your existing modules (make sure these files exist)
 try:
-    from counselor import DynamicCollegeCounselorChatbot, DynamicStudentProfile
+    from counselor import DynamicCollegeCounselorBot, DynamicStudentProfile
     from student_profile import DynamicStudentProfile  # Fallback import
     from college_database import get_college_database
     print("✅ Successfully imported required modules")
@@ -32,7 +32,7 @@ except ImportError as e:
         def model_dump(self):
             return self.__dict__
     
-    class DynamicCollegeCounselorChatbot:
+    class DynamicCollegeCounselorBot:
         def __init__(self, api_key=None):
             self.name = "AI Counselor"
             self.student_profile = DynamicStudentProfile()
@@ -249,9 +249,9 @@ init_database()
 
 # ==================== SESSION MANAGEMENT ====================
 
-active_sessions: Dict[str, DynamicCollegeCounselorChatbot] = {}
+active_sessions: Dict[str, DynamicCollegeCounselorBot] = {}
 
-def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCounselorChatbot]:
+def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCounselorBot]:
     if session_id and session_id in active_sessions:
         return session_id, active_sessions[session_id]
     
@@ -271,7 +271,7 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
                 profile_data_json, sufficient_info, conversation_stage, extraction_history_json, conversation_history_json = row
                 
                 # Restore counselor from database
-                counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+                counselor = DynamicCollegeCounselorBot(api_key=OPENAI_API_KEY)
                 
                 # Restore profile
                 if profile_data_json:
@@ -297,12 +297,12 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
     new_session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(active_sessions)}"
     
     try:
-        counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+        counselor = DynamicCollegeCounselorBot(api_key=OPENAI_API_KEY)
         active_sessions[new_session_id] = counselor
     except Exception as e:
         print(f"Error creating counselor: {e}")
         # Fallback to mock counselor if real one fails
-        counselor = DynamicCollegeCounselorChatbot()
+        counselor = DynamicCollegeCounselorBot()
         active_sessions[new_session_id] = counselor
     
     # Save session to database
@@ -327,7 +327,7 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
     
     return new_session_id, counselor
 
-def update_session_in_db(session_id: str, counselor: DynamicCollegeCounselorChatbot):
+def update_session_in_db(session_id: str, counselor: DynamicCollegeCounselorBot):
     """Update session data in database"""
     try:
         conn = sqlite3.connect(DB_NAME)
@@ -456,13 +456,13 @@ async def get_recommendations(request: RecommendationRequest):
         elif request.profile_data:
             # Create temporary counselor with provided profile data
             try:
-                counselor = DynamicCollegeCounselorChatbot(api_key=OPENAI_API_KEY)
+                counselor = DynamicCollegeCounselorBot(api_key=OPENAI_API_KEY)
                 counselor.student_profile = DynamicStudentProfile(**request.profile_data)
                 counselor.sufficient_info_collected = True
             except Exception as e:
                 print(f"Error creating counselor for recommendations: {e}")
                 # Fallback to mock counselor
-                counselor = DynamicCollegeCounselorChatbot()
+                counselor = DynamicCollegeCounselorBot()
                 counselor.student_profile = DynamicStudentProfile(**request.profile_data)
                 counselor.sufficient_info_collected = True
         else:
