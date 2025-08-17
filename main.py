@@ -14,89 +14,529 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
 
-# Import your existing modules (make sure these files exist)
-try:
-    from counselor import DynamicCollegeCounselorBot
-    from student_profile import DynamicStudentProfile  # Fallback import
-    from college_database import get_college_database
-    print("✅ Successfully imported required modules")
-except ImportError as e:
-    print(f"❌ Import error: {e}")
-    print("⚠️  Creating mock classes for testing purposes")
-    
-    
-    class DynamicCollegeCounselorBot:
-        def __init__(self, api_key=None):
-            self.name = "AI Counselor"
-            self.student_profile = DynamicStudentProfile()
-            self.sufficient_info_collected = False
-            self.extraction_history = []
-            self.conversation_stage = "greeting"
-            self.message_count = 0
-            self.recommendations_provided = False
+# ==================== COUNSELOR CLASSES ====================
+
+class StudentConversation(BaseModel):
+    """Simple conversation tracker without rigid field extraction"""
+    conversation_id: str = Field(default_factory=lambda: f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    student_context: Dict[str, Any] = Field(default_factory=dict, description="Flexible context about the student")
+    conversation_flow: List[Dict[str, str]] = Field(default_factory=list, description="Conversation history")
+    insights_discovered: List[str] = Field(default_factory=list, description="Key insights about the student")
+    recommendations_given: List[Dict[str, Any]] = Field(default_factory=list, description="Recommendations provided")
+    conversation_stage: str = Field(default="introduction", description="Current conversation stage")
+    last_updated: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+
+class DynamicStudentProfile(BaseModel):
+    """Dynamic student profile that can handle any fields"""
+    name: Optional[str] = None
+    age: Optional[int] = None
+    academic_performance: Dict[str, Any] = Field(default_factory=dict)
+    interests: List[str] = Field(default_factory=list)
+    preferred_fields: List[str] = Field(default_factory=list)
+    budget: Optional[int] = None
+    location_preference: Optional[str] = None
+    career_goals: List[str] = Field(default_factory=list)
+    extracurricular: List[str] = Field(default_factory=list)
+    family_background: Dict[str, Any] = Field(default_factory=dict)
+    scores: Dict[str, Any] = Field(default_factory=dict)
+    additional_info: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DynamicCollegeCounselorBot:
+    """Enhanced counselor class for FastAPI integration"""
+
+    def __init__(self, api_key=None, name="Lauren"):
+        self.name = name
+        self.model = "gpt-4o"
         
-        def chat(self, message, context):
-            # Simple mock response
-            responses = [
-                "Thank you for sharing that information. Could you tell me more about your preferred field of study?",
-                "That's great! What's your budget range for college fees?",
-                "Based on your preferences, I can help you find suitable colleges. What location do you prefer?",
-                "Excellent! With your scores and preferences, here are some recommendations I can provide."
-            ]
-            
-            # Simulate info collection
-            if len(self.extraction_history) >= 3:
-                self.sufficient_info_collected = True
-            
-            response = responses[min(len(self.extraction_history), len(responses)-1)]
-            self.extraction_history.append({"message": message, "response": response})
-            
-            return response
+        # Initialize OpenAI client if API key is provided
+        if api_key:
+            try:
+                from openai import OpenAI
+                self.client = OpenAI(api_key=api_key)
+                self.use_openai = True
+                print("✅ OpenAI client initialized successfully")
+            except ImportError:
+                print("⚠️  OpenAI library not installed, using mock responses")
+                self.use_openai = False
+            except Exception as e:
+                print(f"⚠️  OpenAI initialization failed: {e}, using mock responses")
+                self.use_openai = False
+        else:
+            self.use_openai = False
+            print("⚠️  No API key provided, using mock responses")
         
-        def generate_personalized_recommendations(self):
-            # Mock recommendations
-            return [
+        # Initialize conversation tracking
+        self.conversation = StudentConversation()
+        self.student_profile = DynamicStudentProfile()
+        self.message_count = 0
+        self.sufficient_info_collected = False
+        self.extraction_history = []
+        self.conversation_stage = "greeting"
+        self.recommendations_provided = False
+        self.conversation_history = []
+        
+        # Initialize knowledge bases
+        self.college_database = self._initialize_comprehensive_college_database()
+        self.career_insights = self._initialize_career_insights()
+
+    def _initialize_comprehensive_college_database(self):
+        """Initialize comprehensive college database"""
+        return {
+            "premier_engineering": [
                 {
-                    "name": "Indian Institute of Technology - Madras",
-                    "location": "Chennai, Tamil Nadu",
-                    "fees": 200000,
-                    "match_score": 95.0,
-                    "match_reasons": ["Excellent placement record", "Top tier institution", "Strong CS program"]
+                    "name": "Indian Institute of Technology - Bombay",
+                    "location": "Mumbai, Maharashtra",
+                    "established": "1958",
+                    "highlights": ["Top-ranked engineering institute", "Excellent placement record", "Strong alumni network", "World-class research facilities"],
+                    "programs": ["B.Tech", "M.Tech", "Ph.D", "Dual Degree"],
+                    "specialties": ["Computer Science", "Electrical Engineering", "Mechanical Engineering", "Aerospace Engineering"],
+                    "admission": "JEE Advanced",
+                    "fees": 250000,
+                    "streams": ["Computer Science", "Electrical", "Mechanical", "Aerospace", "Chemical"],
+                    "type": "Engineering",
+                    "placement_stats": "Average CTC: ₹15-20 lakhs, Highest: ₹1+ crore"
+                },
+                {
+                    "name": "Indian Institute of Technology - Delhi",
+                    "location": "New Delhi",
+                    "established": "1961",
+                    "highlights": ["Premier technical institute", "Strong industry connections", "Research excellence", "Beautiful campus"],
+                    "programs": ["B.Tech", "M.Tech", "MBA", "Ph.D"],
+                    "specialties": ["Computer Science", "Engineering Physics", "Chemical Engineering", "Mathematics & Computing"],
+                    "admission": "JEE Advanced",
+                    "fees": 250000,
+                    "streams": ["Computer Science", "Engineering Physics", "Chemical", "Mathematics"],
+                    "type": "Engineering"
+                },
+                {
+                    "name": "BITS Pilani",
+                    "location": "Pilani, Rajasthan",
+                    "established": "1964",
+                    "highlights": ["Premier private engineering institute", "Industry-integrated programs", "Flexible curriculum", "Strong entrepreneurship culture"],
+                    "programs": ["B.E.", "M.Sc.", "MBA", "Ph.D", "Dual Degree"],
+                    "specialties": ["Computer Science", "Electronics", "Chemical Engineering", "Pharmacy"],
+                    "admission": "BITSAT",
+                    "fees": 450000,
+                    "streams": ["Computer Science", "Electronics", "Chemical", "Pharmacy"],
+                    "type": "Engineering"
                 },
                 {
                     "name": "NIT Surathkal",
-                    "location": "Mangalore, Karnataka", 
+                    "location": "Mangalore, Karnataka",
+                    "highlights": ["Top NIT", "Excellent placement record", "Strong technical culture", "Beautiful coastal campus"],
+                    "programs": ["B.Tech", "M.Tech", "MBA", "Ph.D"],
+                    "admission": "JEE Main",
                     "fees": 150000,
-                    "match_score": 90.0,
-                    "match_reasons": ["Good placement record", "Within budget", "Preferred location"]
+                    "streams": ["Computer Science", "Electronics", "Mechanical", "Civil"],
+                    "type": "Engineering"
                 },
                 {
                     "name": "BMS College of Engineering",
                     "location": "Bangalore, Karnataka",
+                    "highlights": ["Autonomous college", "Strong industry connections", "Modern infrastructure", "CS specialization"],
+                    "programs": ["B.E.", "M.Tech"],
+                    "admission": "COMEDK/Management",
                     "fees": 400000,
-                    "match_score": 85.0,
-                    "match_reasons": ["Modern infrastructure", "Good industry connections", "CS specialization"]
+                    "streams": ["Computer Science", "Information Science", "Electronics", "Mechanical"],
+                    "type": "Engineering"
+                }
+            ],
+            "medical_colleges": [
+                {
+                    "name": "All India Institute of Medical Sciences - Delhi",
+                    "location": "New Delhi",
+                    "highlights": ["Premier medical institute", "Excellent clinical exposure", "Subsidized education", "Top-notch faculty"],
+                    "programs": ["MBBS", "MD/MS", "Ph.D", "Nursing"],
+                    "admission": "NEET",
+                    "fees": 5000,
+                    "streams": ["Medicine", "Surgery", "Pediatrics", "Radiology"],
+                    "type": "Medical"
+                }
+            ],
+            "business_schools": [
+                {
+                    "name": "Indian Institute of Management - Ahmedabad",
+                    "location": "Ahmedabad, Gujarat",
+                    "highlights": ["Top MBA school in India", "Excellent faculty", "Strong alumni network", "Case-study method"],
+                    "programs": ["PGP (MBA)", "Executive MBA", "Ph.D"],
+                    "admission": "CAT + WAT + PI",
+                    "fees": 2500000,
+                    "streams": ["General Management", "Finance", "Marketing", "Operations"],
+                    "type": "Management"
                 }
             ]
-    
-    def get_college_database():
-        # Mock college database
-        return [
-            {
-                "name": "Indian Institute of Technology - Madras",
-                "location": "Chennai, Tamil Nadu",
-                "type": "Engineering",
-                "fees": 200000,
-                "streams": ["Computer Science", "Mechanical", "Electrical", "Civil"]
-            },
-            {
-                "name": "NIT Surathkal", 
-                "location": "Mangalore, Karnataka",
-                "type": "Engineering",
-                "fees": 150000,
-                "streams": ["Computer Science", "Electronics", "Mechanical"]
+        }
+
+    def _initialize_career_insights(self):
+        """Initialize career insights database"""
+        return {
+            "high_growth_careers": {
+                "technology": {
+                    "Software Engineer": {
+                        "description": "Design and develop software applications",
+                        "skills_required": ["Programming", "Problem-solving", "System design"],
+                        "education_path": ["B.Tech Computer Science", "BCA + MCA", "Self-learning + certifications"],
+                        "salary_range": "₹4-50 lakhs per year",
+                        "growth_prospects": "Excellent - High demand, startup opportunities, global market"
+                    },
+                    "Data Scientist": {
+                        "description": "Analyze complex data to derive business insights",
+                        "skills_required": ["Statistics", "Machine Learning", "Python/R", "SQL"],
+                        "education_path": ["B.Tech + Data Science certification", "Statistics/Math degree + upskilling"],
+                        "salary_range": "₹6-40 lakhs per year",
+                        "growth_prospects": "Very High - Every industry needs data insights"
+                    }
+                },
+                "healthcare": {
+                    "Doctor": {
+                        "description": "Diagnose and treat medical conditions",
+                        "skills_required": ["Medical knowledge", "Empathy", "Decision-making", "Communication"],
+                        "education_path": ["MBBS + MD/MS specialization"],
+                        "salary_range": "₹6-50+ lakhs per year",
+                        "growth_prospects": "Stable - Always in demand"
+                    }
+                },
+                "business": {
+                    "Management Consultant": {
+                        "description": "Help organizations solve complex business problems",
+                        "skills_required": ["Analytical thinking", "Communication", "Industry knowledge"],
+                        "education_path": ["Any graduation + MBA from top school"],
+                        "salary_range": "₹8-40 lakhs per year",
+                        "growth_prospects": "Excellent - High learning curve, global opportunities"
+                    }
+                }
             }
-        ]
+        }
+
+    def _get_dynamic_system_prompt(self):
+        """Generate dynamic system prompt based on conversation stage"""
+        base_personality = f"""
+        You are {self.name}, an expert AI college counselor with deep knowledge of Indian and global education systems. 
+        You have years of experience helping students navigate their educational journey.
+
+        Your Core Qualities:
+        - Warm, encouraging, and genuinely interested in each student's success
+        - Highly knowledgeable about colleges, careers, and education trends
+        - Patient listener who asks thoughtful follow-up questions
+        - Provides specific, actionable advice rather than generic responses
+        - Shares relevant insights and stories to help students understand options
+        - Balances dreams with practical realities
+
+        Current conversation stage: {self.conversation_stage}
+        Messages exchanged: {self.message_count}
+        
+        Based on the conversation, provide helpful, informative responses that guide the student toward making informed decisions about their education and career.
+        """
+        
+        return base_personality
+
+    def _update_conversation_stage(self, user_message):
+        """Update conversation stage based on content and message count"""
+        message_lower = user_message.lower()
+        
+        if self.message_count <= 2:
+            self.conversation_stage = "greeting"
+        elif self.message_count <= 5:
+            self.conversation_stage = "information_gathering"
+        elif any(word in message_lower for word in ["recommend", "suggest", "what should i", "help me choose"]):
+            self.conversation_stage = "recommendation"
+        elif self.message_count > 5:
+            self.conversation_stage = "detailed_guidance"
+
+    def _extract_student_information(self, user_message):
+        """Extract and update student information from conversation"""
+        message_lower = user_message.lower()
+        updates = {}
+        
+        # Extract interests
+        tech_keywords = ["computer", "programming", "software", "coding", "tech", "it"]
+        if any(word in message_lower for word in tech_keywords):
+            if "Computer Science" not in self.student_profile.preferred_fields:
+                self.student_profile.preferred_fields.append("Computer Science")
+                updates["tech_interest"] = True
+        
+        medical_keywords = ["doctor", "medical", "medicine", "healthcare", "mbbs"]
+        if any(word in message_lower for word in medical_keywords):
+            if "Medicine" not in self.student_profile.preferred_fields:
+                self.student_profile.preferred_fields.append("Medicine")
+                updates["medical_interest"] = True
+        
+        business_keywords = ["business", "management", "mba", "finance", "marketing"]
+        if any(word in message_lower for word in business_keywords):
+            if "Business" not in self.student_profile.preferred_fields:
+                self.student_profile.preferred_fields.append("Business")
+                updates["business_interest"] = True
+        
+        # Extract scores and academic info
+        score_patterns = ["scored", "marks", "percentage", "cgpa", "gpa", "jee", "neet"]
+        if any(pattern in message_lower for pattern in score_patterns):
+            updates["academic_info_provided"] = True
+        
+        # Extract budget information
+        budget_keywords = ["budget", "afford", "fees", "cost", "expensive", "cheap"]
+        if any(word in message_lower for word in budget_keywords):
+            updates["budget_discussed"] = True
+        
+        # Update additional context
+        for key, value in updates.items():
+            self.student_profile.additional_info[key] = value
+        
+        # Check if sufficient info is collected
+        if len(self.student_profile.preferred_fields) > 0 and len(self.student_profile.additional_info) >= 2:
+            self.sufficient_info_collected = True
+
+    def chat(self, message, context):
+        """Main chat function with OpenAI integration"""
+        self.message_count += 1
+        
+        # Update conversation stage and extract information
+        self._update_conversation_stage(message)
+        self._extract_student_information(message)
+        
+        # Add to extraction history
+        self.extraction_history.append({
+            "message": message,
+            "stage": self.conversation_stage,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Add to conversation history
+        self.conversation_history.append({
+            "role": "user",
+            "content": message,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        if self.use_openai:
+            try:
+                # Prepare messages for OpenAI
+                system_prompt = self._get_dynamic_system_prompt()
+                
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message}
+                ]
+                
+                # Add recent conversation context (last 4 exchanges)
+                recent_history = self.conversation_history[-8:]  # Last 4 exchanges (user + assistant)
+                for i in range(0, len(recent_history)-1, 2):  # Skip current message
+                    if i+1 < len(recent_history):
+                        messages.insert(-1, {"role": "user", "content": recent_history[i]["content"]})
+                        messages.insert(-1, {"role": "assistant", "content": recent_history[i+1]["content"]})
+                
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1000,
+                    frequency_penalty=0.3,
+                    presence_penalty=0.2
+                )
+                
+                assistant_response = response.choices[0].message.content
+                
+            except Exception as e:
+                print(f"OpenAI API error: {e}")
+                assistant_response = self._get_fallback_response(message)
+        else:
+            assistant_response = self._get_fallback_response(message)
+        
+        # Add assistant response to history
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": assistant_response,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return assistant_response
+
+    def _get_fallback_response(self, message):
+        """Provide intelligent fallback responses when OpenAI is not available"""
+        message_lower = message.lower()
+        
+        if self.message_count == 1:
+            return f"Hello! I'm {self.name}, your AI college counselor. I'm here to help you navigate your educational journey and find the best college options for your goals. Could you tell me a bit about yourself - what are you currently studying and what fields interest you most?"
+        
+        # Handle specific queries
+        if any(word in message_lower for word in ["engineering", "iit", "jee", "computer science"]):
+            return """Great choice! Engineering offers excellent career prospects. Some top options include:
+
+🏆 **IITs** - Premier institutes with world-class education (Admission: JEE Advanced)
+🎯 **NITs** - Excellent government institutes across India (Admission: JEE Main)  
+⭐ **BITS Pilani** - Top private institute with industry focus (Admission: BITSAT)
+🏫 **State colleges** - Good quality education at affordable fees
+
+Computer Science is particularly hot right now with amazing placement opportunities. What's your current academic background? Are you preparing for JEE or any other entrance exams?"""
+
+        elif any(word in message_lower for word in ["medical", "doctor", "neet", "mbbs"]):
+            return """Medicine is a noble and rewarding career path! Here's what you should know:
+
+🏥 **AIIMS** - Premier medical institutes with highly subsidized fees
+🎓 **Government Medical Colleges** - Affordable with excellent clinical exposure
+🏫 **Private Medical Colleges** - Good infrastructure but higher fees (₹50L - ₹1.5Cr)
+
+Key points:
+- NEET is mandatory for all medical admissions
+- Start preparation early - very competitive field
+- Consider specialization options after MBBS
+- Alternative paths: BDS, AYUSH, Allied Health Sciences
+
+What's your current academic performance? Have you started NEET preparation?"""
+
+        elif any(word in message_lower for word in ["mba", "management", "business", "cat"]):
+            return """Business education opens doors to diverse career opportunities!
+
+🎯 **IIMs** - Top business schools with excellent ROI (Admission: CAT)
+⭐ **ISB, XLRI, FMS** - Premier institutes with strong placements  
+📈 **Sectoral MBAs** - Healthcare, Rural, Family Business specializations
+
+Career paths:
+- Management Consulting (₹15-40L starting)
+- Investment Banking & Finance  
+- Product Management in Tech
+- General Management roles
+
+Most MBA programs prefer 2-3 years work experience. Are you currently working or planning to work before MBA? What business areas interest you most?"""
+
+        elif any(word in message_lower for word in ["confused", "help", "don't know", "unsure"]):
+            return """It's completely normal to feel confused about career choices! Let's explore your options systematically.
+
+Let me ask you a few questions to better understand your interests:
+
+🤔 **Academic Performance**: How are your current grades? Which subjects do you enjoy most?
+🎯 **Interests**: What activities make you lose track of time? 
+💡 **Career Vision**: Where do you see yourself in 10 years?
+💰 **Practical Considerations**: Any budget constraints or location preferences?
+👨‍👩‍👧‍👦 **Family Input**: What does your family suggest?
+
+Based on your responses, I can provide personalized recommendations. What would you like to share first?"""
+
+        else:
+            return """Thank you for sharing that! I'm learning about your preferences and goals.
+
+Based on our conversation so far, I can see you're exploring your options thoughtfully. Here are some areas we could discuss further:
+
+📚 **Academic Paths**: Engineering, Medical, Business, Liberal Arts, Sciences
+🌍 **Study Locations**: India vs International options  
+💼 **Career Prospects**: Emerging fields vs Traditional stable careers
+💰 **Financial Planning**: Education costs, scholarships, loans
+
+What specific aspect would you like to dive deeper into? I'm here to provide detailed insights to help you make informed decisions!"""
+
+    def generate_personalized_recommendations(self):
+        """Generate recommendations based on student profile"""
+        recommendations = []
+        
+        # Get all colleges from database
+        all_colleges = []
+        for category in self.college_database.values():
+            all_colleges.extend(category)
+        
+        # Filter and score colleges based on student preferences
+        for college in all_colleges:
+            score = 0
+            reasons = []
+            
+            # Check field alignment
+            if self.student_profile.preferred_fields:
+                college_streams = college.get('streams', [])
+                field_match = any(
+                    any(pref.lower() in stream.lower() for stream in college_streams)
+                    for pref in self.student_profile.preferred_fields
+                )
+                if field_match:
+                    score += 40
+                    reasons.append(f"Offers programs in {', '.join(self.student_profile.preferred_fields)}")
+            
+            # Budget consideration
+            if self.student_profile.budget:
+                college_fees = college.get('fees', 0)
+                if college_fees <= self.student_profile.budget:
+                    score += 30
+                    reasons.append("Within budget range")
+                elif college_fees <= self.student_profile.budget * 1.2:  # 20% over budget
+                    score += 15
+                    reasons.append("Slightly above budget but manageable")
+            
+            # Location preference
+            if self.student_profile.location_preference:
+                if self.student_profile.location_preference.lower() in college.get('location', '').lower():
+                    score += 20
+                    reasons.append("Preferred location")
+            
+            # Add base score for quality (based on highlights)
+            score += len(college.get('highlights', [])) * 2
+            
+            if score > 20:  # Only include colleges with reasonable scores
+                recommendations.append({
+                    "name": college['name'],
+                    "location": college['location'],
+                    "fees": college.get('fees', 0),
+                    "match_score": min(score, 100.0),
+                    "match_reasons": reasons or ["Good overall fit based on your profile"],
+                    "type": college.get('type', 'General'),
+                    "admission": college.get('admission', 'Various entrance exams'),
+                    "highlights": college.get('highlights', [])[:3]  # Top 3 highlights
+                })
+        
+        # Sort by match score and return top recommendations
+        recommendations.sort(key=lambda x: x['match_score'], reverse=True)
+        
+        # If no specific matches, provide some default good colleges
+        if not recommendations:
+            default_colleges = [
+                {
+                    "name": "Indian Institute of Technology - Bombay",
+                    "location": "Mumbai, Maharashtra",
+                    "fees": 250000,
+                    "match_score": 85.0,
+                    "match_reasons": ["Premier engineering institute", "Excellent career prospects"],
+                    "type": "Engineering",
+                    "admission": "JEE Advanced"
+                },
+                {
+                    "name": "BITS Pilani",
+                    "location": "Pilani, Rajasthan",
+                    "fees": 450000,
+                    "match_score": 80.0,
+                    "match_reasons": ["Top private institute", "Industry-focused curriculum"],
+                    "type": "Engineering",
+                    "admission": "BITSAT"
+                },
+                {
+                    "name": "All India Institute of Medical Sciences",
+                    "location": "New Delhi",
+                    "fees": 5000,
+                    "match_score": 90.0,
+                    "match_reasons": ["Premier medical institute", "Highly subsidized fees"],
+                    "type": "Medical",
+                    "admission": "NEET"
+                }
+            ]
+            recommendations = default_colleges
+        
+        return recommendations[:10]  # Return top 10 recommendations
+
+
+def get_college_database():
+    """Get the college database for API endpoints"""
+    counselor = DynamicCollegeCounselorBot()
+    colleges = []
+    
+    for category in counselor.college_database.values():
+        for college in category:
+            colleges.append({
+                "name": college['name'],
+                "location": college['location'],
+                "type": college.get('type', 'General'),
+                "fees": college.get('fees', 0),
+                "streams": college.get('streams', [])
+            })
+    
+    return colleges
+
 
 # ==================== PYDANTIC MODELS ====================
 
@@ -158,6 +598,7 @@ app.add_middleware(
 
 # Set your OpenAI API key here - replace with your actual key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+
 # ==================== DATABASE SETUP ====================
 
 DB_NAME = "counselor_api.db"
@@ -294,7 +735,7 @@ def get_or_create_session(session_id: str = None) -> tuple[str, DynamicCollegeCo
         active_sessions[new_session_id] = counselor
     except Exception as e:
         print(f"Error creating counselor: {e}")
-        # Fallback to mock counselor if real one fails
+        # Fallback to counselor without API key
         counselor = DynamicCollegeCounselorBot()
         active_sessions[new_session_id] = counselor
     
@@ -337,15 +778,16 @@ def update_session_in_db(session_id: str, counselor: DynamicCollegeCounselorBot)
         cursor.execute("""
             UPDATE sessions 
             SET updated_at = ?, profile_data = ?, sufficient_info = ?, conversation_stage = ?, 
-                extraction_history = ?, conversation_history = ?
+                extraction_history = ?, conversation_history = ?, message_count = ?
             WHERE session_id = ?
         """, (
             datetime.now().isoformat(),
             profile_data,
             counselor.sufficient_info_collected,
-            getattr(counselor, 'conversation_stage', 'greeting'),
+            counselor.conversation_stage,
             extraction_history,
             conversation_history,
+            counselor.message_count,
             session_id
         ))
         conn.commit()
@@ -384,14 +826,9 @@ async def chat_with_counselor(request: ChatMessage, background_tasks: Background
         # Process the message using the actual counselor logic
         response = counselor.chat(request.message, [])
         
-        # Update sufficient info flag based on conversation stage
-        if hasattr(counselor, 'conversation_stage'):
-            if counselor.conversation_stage == "ready_for_recommendations":
-                counselor.sufficient_info_collected = True
-        
         # Get recommendations if sufficient info is collected
         recommendations = None
-        if counselor.sufficient_info_collected or (hasattr(counselor, 'conversation_stage') and counselor.conversation_stage == "ready_for_recommendations"):
+        if counselor.sufficient_info_collected:
             try:
                 recommendations = counselor.generate_personalized_recommendations()
             except Exception as e:
@@ -454,7 +891,7 @@ async def get_recommendations(request: RecommendationRequest):
                 counselor.sufficient_info_collected = True
             except Exception as e:
                 print(f"Error creating counselor for recommendations: {e}")
-                # Fallback to mock counselor
+                # Fallback to counselor without API key
                 counselor = DynamicCollegeCounselorBot()
                 counselor.student_profile = DynamicStudentProfile(**request.profile_data)
                 counselor.sufficient_info_collected = True
@@ -490,8 +927,8 @@ async def get_student_profile(session_id: str):
         "profile": counselor.student_profile.model_dump(),
         "sufficient_info": counselor.sufficient_info_collected,
         "extraction_history": counselor.extraction_history,
-        "conversation_stage": getattr(counselor, 'conversation_stage', 'unknown'),
-        "message_count": getattr(counselor, 'message_count', 0)
+        "conversation_stage": counselor.conversation_stage,
+        "message_count": counselor.message_count
     }
 
 @app.put("/profile/{session_id}", tags=["Profile"])
@@ -689,7 +1126,7 @@ async def startup_event():
     if OPENAI_API_KEY and OPENAI_API_KEY.startswith("sk-"):
         print("✅ OpenAI API key configured")
     else:
-        print("⚠️  Warning: OpenAI API key not properly configured - using mock responses")
+        print("⚠️  Warning: OpenAI API key not properly configured - using fallback responses")
     
     print("✅ API is ready to serve requests!")
 
