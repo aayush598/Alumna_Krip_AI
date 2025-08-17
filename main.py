@@ -16,7 +16,7 @@ load_dotenv()  # Load environment variables from .env file
 
 # Import your existing modules (make sure these files exist)
 try:
-    from counselor import DynamicCollegeCounselorBot, DynamicStudentProfile
+    from counselor import DynamicCollegeCounselorBot
     from student_profile import DynamicStudentProfile  # Fallback import
     from college_database import get_college_database
     print("✅ Successfully imported required modules")
@@ -24,13 +24,6 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     print("⚠️  Creating mock classes for testing purposes")
     
-    # Mock classes for testing when modules are missing
-    class DynamicStudentProfile:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-        
-        def model_dump(self):
-            return self.__dict__
     
     class DynamicCollegeCounselorBot:
         def __init__(self, api_key=None):
